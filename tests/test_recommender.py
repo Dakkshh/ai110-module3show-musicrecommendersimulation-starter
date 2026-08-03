@@ -59,3 +59,75 @@ def test_explain_recommendation_returns_non_empty_string():
     explanation = rec.explain_recommendation(user, song)
     assert isinstance(explanation, str)
     assert explanation.strip() != ""
+
+from src.recommender import (
+    load_songs,
+    recommend_songs,
+    get_confidence_label,
+    get_unmatched_core_preferences,
+)
+
+
+def test_confidence_label_high_score():
+    label = get_confidence_label(5.0)
+    assert label == "✅ Confident match"
+
+
+def test_confidence_label_low_score():
+    label = get_confidence_label(1.5)
+    assert label == "⚠️ Low confidence match"
+
+
+def test_unmatched_preferences_flags_missing_mood():
+    user_prefs = {"genre": "metal", "mood": "sad"}
+    reasons = ["genre match (metal) (+2.0)"]  # no mood match reason present
+    unmatched = get_unmatched_core_preferences(user_prefs, reasons)
+    assert "mood" in unmatched
+    assert "genre" not in unmatched
+
+
+def test_unmatched_preferences_empty_when_all_matched():
+    user_prefs = {"genre": "pop", "mood": "happy"}
+    reasons = ["genre match (pop) (+2.0)", "mood match (happy) (+1.5)"]
+    unmatched = get_unmatched_core_preferences(user_prefs, reasons)
+    assert unmatched == []
+
+
+def test_adversarial_profile_top_pick_is_confident_but_flags_mood_gap():
+    songs = load_songs("data/songs.csv")
+    adversarial_prefs = {
+        "genre": "metal", "mood": "sad",
+        "energy": 0.90, "tempo": 165
+    }
+    recommendations = recommend_songs(adversarial_prefs, songs, k=1)
+    song, score, explanation, confidence, unmatched = recommendations[0]
+
+    assert song["title"] == "Iron Fist"
+    assert confidence == "✅ Confident match"
+    assert "mood" in unmatched
+
+
+def test_normal_profile_top_pick_has_no_unmatched_preferences():
+    songs = load_songs("data/songs.csv")
+    pop_prefs = {
+        "genre": "pop", "mood": "happy",
+        "energy": 0.85, "tempo": 122
+    }
+    recommendations = recommend_songs(pop_prefs, songs, k=1)
+    song, score, explanation, confidence, unmatched = recommendations[0]
+
+    assert song["title"] == "Sunrise City"
+    assert unmatched == []
+
+
+def test_genre_weight_matches_documented_algorithm():
+    """
+    Regression test: catches the bug where score_song() used +1.0 for genre
+    instead of the documented +2.0. Locks in the corrected weight.
+    """
+    songs = load_songs("data/songs.csv")
+    prefs = {"genre": "pop", "mood": "happy", "energy": 0.85, "tempo": 122}
+    recommendations = recommend_songs(prefs, songs, k=1)
+    _, score, explanation, _, _ = recommendations[0]
+
+    assert "genre match (pop) (+2.0)" in explanation

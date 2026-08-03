@@ -1,0 +1,14 @@
+flowchart TD
+    A[User Profile Input<br/>genre, mood, energy, tempo] --> B[load_songs<br/>reads data/songs.csv]
+    B --> C{score_song<br/>for each song}
+    C --> D[Weighted Scoring<br/>genre +2.0, mood +1.5,<br/>energy/tempo closeness up to +1.0 each]
+    D --> E[get_confidence_label<br/>flags low-confidence scores]
+    D --> F[get_unmatched_core_preferences<br/>flags genre/mood gaps regardless of score]
+    E --> G[recommend_songs<br/>sorts and returns top k]
+    F --> G
+    G --> H[CLI Output<br/>score + explanation + confidence + gap warnings]
+    G --> I[Logging<br/>recommender.log records<br/>low-confidence and preference-gap events]
+    H --> J[Human Review<br/>developer reads log/output,<br/>verifies flags are accurate]
+    K[Automated Test Suite<br/>9 pytest tests] -.validates.-> D
+    K -.validates.-> E
+    K -.validates.-> F
