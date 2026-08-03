@@ -97,15 +97,15 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
     reasons = []
 
     if song["genre"] == user_prefs.get("genre"):
-        score += 1.0
-        reasons.append(f"genre match ({user_prefs['genre']}) (+1.0)")
+        score += 2.0
+        reasons.append(f"genre match ({user_prefs['genre']}) (+2.0)")
 
     if song["mood"] == user_prefs.get("mood"):
         score += 1.5
         reasons.append(f"mood match ({user_prefs['mood']}) (+1.5)")
 
     if "energy" in user_prefs:
-        energy_closeness = max(0.0, 1 - abs(song["energy"] - user_prefs["energy"])) * 2.0
+        energy_closeness = max(0.0, 1 - abs(song["energy"] - user_prefs["energy"])) * 1.0
         score += energy_closeness
         reasons.append(f"energy closeness (+{energy_closeness:.2f})")
 
@@ -116,17 +116,54 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
 
     return score, reasons
 
+MAX_POSSIBLE_SCORE = 5.5
+LOW_CONFIDENCE_THRESHOLD = 0.4  # 40% of max possible score
 
-def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
+
+def get_confidence_label(score: float) -> str:
+    """
+    Returns a human-readable confidence label based on how close
+    the score is to the maximum possible score.
+    """
+    ratio = score / MAX_POSSIBLE_SCORE
+    if ratio < LOW_CONFIDENCE_THRESHOLD:
+        return "⚠️ Low confidence match"
+    return "✅ Confident match"
+
+def get_unmatched_core_preferences(user_prefs: Dict, reasons: List[str]) -> List[str]:
+    """
+    Checks whether the user's core stated preferences (genre, mood) were
+    actually satisfied by this song, regardless of overall score.
+    Returns a list of preference names that were requested but not matched.
+    """
+    unmatched = []
+
+    if "genre" in user_prefs:
+        genre_matched = any(reason.startswith("genre match") for reason in reasons)
+        if not genre_matched:
+            unmatched.append("genre")
+
+    if "mood" in user_prefs:
+        mood_matched = any(reason.startswith("mood match") for reason in reasons)
+        if not mood_matched:
+            unmatched.append("mood")
+
+    return unmatched
+
+
+def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str, str, List[str]]]:
     """
     Functional implementation of the recommendation logic.
     Required by src/main.py
+    Returns tuples of (song, score, explanation, confidence_label, unmatched_preferences).
     """
     scored = []
     for song in songs:
         score, reasons = score_song(user_prefs, song)
         explanation = "; ".join(reasons) if reasons else "No matching preferences found."
-        scored.append((song, score, explanation))
+        confidence = get_confidence_label(score)
+        unmatched = get_unmatched_core_preferences(user_prefs, reasons)
+        scored.append((song, score, explanation, confidence, unmatched))
 
     scored.sort(key=lambda item: item[1], reverse=True)
     return scored[:k]
