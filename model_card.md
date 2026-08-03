@@ -62,8 +62,28 @@ A few improvements worth trying next:
 
 ---
 
+## 8.5 Applied AI System Extension: Reliability Feature
+
+### Misuse Potential and Prevention
+
+This system could be misused if someone presented its `✅ Confident match` label as a guarantee of song quality or user satisfaction, rather than what it actually is — a measure of how many raw scoring points a song accumulated. Since the confidence label alone doesn't verify that specifically requested preferences (like genre or mood) were actually met, a bad-faith actor could cherry-pick only the confidence label while hiding the preference-gap warnings to make a weak recommendation look stronger than it is. To prevent this, both signals (confidence label and preference-gap warnings) are always printed and logged together in the CLI output — never one without the other — so a user or reviewer can't see a "confident" result without also seeing whether it actually matched what was asked.
+
+### What Surprised Us During Reliability Testing
+
+The most surprising result came from the adversarial profile test. We expected the low-confidence flag alone to catch problematic recommendations, but it didn't: "Iron Fist" scored high enough (3.90) to be labeled `✅ Confident match` even though it completely failed to match the requested "sad" mood. This showed us that a single confidence score, based purely on point totals, can mask a real gap between what a user asked for and what they actually got. That's why we added a second, independent check (`get_unmatched_core_preferences`) rather than trying to tune the confidence threshold — the two failure modes needed two different detectors.
+
+### AI Collaboration: One Helpful, One Flawed Suggestion
+
+**Helpful:** When designing the confidence threshold, AI suggested comparing each score against a percentage of the maximum possible score (5.5) rather than a fixed absolute number. This turned out to be the right call — using a ratio meant the threshold stayed meaningful even as we experimented with different weight configurations, instead of needing to be manually retuned every time the scoring formula changed.
+
+**Flawed:** Early in this extension, AI-suggested code for `score_song()` used a genre weight of +1.0 and an energy weight of up to +2.0, without flagging that this contradicted the already-documented algorithm in the README (genre +2.0, energy +1.0). This went unnoticed until we wrote a regression test (`test_genre_weight_matches_documented_algorithm`) specifically to check the code against the documentation — the test failed on the first run, revealing the mismatch. We had to manually correct the weights in `recommender.py` to match the original spec. This was a good reminder that AI-generated code needs to be checked against existing documentation, not just checked for "does it run without errors."
+
+---
+
 ## 9. Personal Reflection  
 
 My biggest learning moment was realizing my UserProfile design didn't match what the tests actually needed — a good reminder to check the real spec instead of assuming.
+
 AI helped a lot with the scoring math and generating test cases I wouldn't have thought of, like a contradictory "metal + sad" profile. But I still had to double-check its code against my real files, since it can't see my repo and sometimes assumed fields that didn't exist yet.
+
 What surprised me most: even a simple 4-feature system felt like real recommendations for normal cases — but the adversarial test showed it doesn't actually "know" when it fails. It just confidently returns its best guess, even when a preference was never matched.
